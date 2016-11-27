@@ -7,42 +7,72 @@ module Pwnypot
   class Server
     attr_accessor :port
     attr_accessor :banner
-    attr_accessor :log
+    attr_accessor :mesgs
     attr_accessor :rainbows
-    
-    # When a new Server is created, it sets
-    # everything false by default
+
     def initialize(options=false)
       @port = false
       @banner = false
-      @log = false
       @rainbows = false
-      setup(options) if options
+      @mesgs = false
+      #setup(options) if options
+      if options
+        setup_port(options[:port]) if options[:port]
+        setup_banner(options[:banner]) if options[:banner]
+        setup_rainbows(options[:rainbows] || options[:rainbow]) if options[:rainbows] || options[:rainbow]
+      end
+      true
     end
 
-    def setup(options=false)
-      if options
-        @port = options[:port] || 8080
-        @banner = options[:banner] || 'MS-IIS WEB SERVER 5.0'
-        @log = true if options[:logging]
-        if options[:rainbows]
-          require 'lolize/auto'
-          @rainbows = true
-        end 
-      end
-      @port = 8080 unless @port
-      @banner = 'MS-IIS WEB SERVER 5.0' unless @banner
-      @log = false unless @log
-      @rainbows = false unless @rainbows
+    def setup(options={})
+      setup_port(options[:port])
+      setup_banner(options[:banner])
+      setup_rainbows(options[:rainbows] || options[:rainbow])
       true 
     end
 
-    def start
-      unless @port and @banner
-        Pwnypot.logger.error("FAILED to start pwnypot. Need both a banner and a port.") if @log
-        PwnypotError.new("Need both a port and a banner to start a pwnypot up!") 
+    def setup_port(port=false)
+      if port
+        @port = port
+      else
+        @port = 8080
       end
-      Pwnypot.logger.info("STARTING pwnypot on PORT: #{@port} with BANNER: #{@banner}") if @log
+      true
+    end
+
+    def setup_banner(banner=false)
+      if banner
+        @banner = banner
+      else
+        @banner = "MS-IIS WEB SERVER 5.0"
+      end
+      true
+    end
+
+    def setup_logging(log=false)
+      if log
+        @log = true
+      else
+        @log = false
+      end
+    end
+
+    def setup_rainbows(rainbows=false)
+      if rainbows
+        require 'lolize/auto'
+        @rainbows = true
+      else
+        @rainbows = false
+      end
+    end
+
+    def add_mesg(mesg)
+      @mesgs = [] unless @mesgs
+      @mesgs << mesg
+    end
+
+    def start
+      ensure_port_set
       server = TCPServer.new(@port)
       server.listen(1)
       loop do
@@ -50,18 +80,31 @@ module Pwnypot
           Thread.fork(server.accept) do |client| 
             begin
               r_port, r_ip = Socket.unpack_sockaddr_in(client.getpeername)
-              Pwnypot.logger.warn("CAUGHT on PORT: #{@port} -- #{r_ip}:#{r_port}") if @log
-              client.puts @banner
+              client.puts @banner if @banner
+              if @mesgs and @mesgs.is_a? Array
+                @mesgs.each { |msg| client.puts msg } unless @mesgs.empty?
+              end
               client.close
+            rescue => e
+              # do something with error
             ensure 
               client.close
             end
           end
         rescue => e
-          Pwnypot.logger.error("#{e}") if @log
+          # do something with error
         end
       end
     end
+
+    private
+
+    def ensure_port_set
+      unless @port
+        raise PwnypotError.new("Need to specify a port / setup with defaults to start!") 
+      end
+    end
+
   end 
 
 end
